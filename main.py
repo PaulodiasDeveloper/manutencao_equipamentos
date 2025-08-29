@@ -11,7 +11,7 @@ st.set_page_config(page_title="Dashboard de Análise de Ocorrências", layout="w
 sns.set_style("whitegrid")
 
 # Título principal do dashboard
-st.title("📊 Dashboard de Análise de Ocorrências")
+st.title("📊 Análise Integrada de Ocorrências: Locais, Equipamentos e Paradas")
 st.markdown("---")
 
 # Componente para upload do arquivo Excel na barra lateral
