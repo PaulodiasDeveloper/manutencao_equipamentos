@@ -19,7 +19,7 @@ st.set_page_config(
 # CSS personalizado
 st.markdown("""
 <style>
-    .main-header {font-size: 2.5rem; color: #1f77b4}
+    .main-header {font-size: 2.5rem !important; justify-self: center; color: #008542;}
     .card { 
         background-color: #f0f2f6; 
         padding: 20px; 
@@ -40,8 +40,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Cabeçalho
-st.markdown('<p class="main-header">📊 Análise de Paradas de Equipamentos</p>', unsafe_allow_html=True)
-st.markdown("Este aplicativo permite explorar os dados de **paradas de equipamentos** de forma interativa.")
+st.markdown('<p class="main-header">🏗️ Análise de Paradas de Equipamentos</p>', unsafe_allow_html=True)
+st.markdown("Este relatório apresenta a análise estatística das **paradas de equipamentos**, com base na base de dados contendo 20 registros e 11 colunas, **totalizando 1469,4 horas de paradas acumuladas**. O objetivo é fornecer insights relevantes para a gestão da manutenção e otimização dos recursos.")
 
 # =====================
 # Upload ou leitura fixa
