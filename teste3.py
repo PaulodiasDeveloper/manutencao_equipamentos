@@ -328,6 +328,39 @@ if uploaded_file is not None:
             )
             st.plotly_chart(fig11, use_container_width=True)
 
+        # LINHA DO TEMPO DAS PARADAS - ADICIONADO AQUI
+        st.header("Linha do Tempo das Paradas")
+        
+        # Preparar dados para a linha do tempo
+        timeline_data = []
+        for _, row in df_filtrado.iterrows():
+            timeline_data.append({
+                'Equipamento': row['Equipamento'],
+                'Local': row['Local'],
+                'Início': row['Data Início'],
+                'Fim': row['Data Fim'] if pd.notna(row['Data Fim']) else datetime.now(),
+                'Duração': row['Tempo Calculado (h)'] if pd.notna(row['Tempo Calculado (h)']) else 0,
+                'Causa': row['Causa'],
+                'Status': row['Status']
+            })
+
+        timeline_df = pd.DataFrame(timeline_data)
+
+        if not timeline_df.empty:
+            fig_timeline = px.timeline(
+                timeline_df, 
+                x_start="Início", 
+                x_end="Fim", 
+                y="Equipamento",
+                color="Local",
+                hover_data=["Causa", "Status", "Duração"],
+                title="Linha do Tempo das Paradas"
+            )
+            fig_timeline.update_yaxes(autorange="reversed")
+            st.plotly_chart(fig_timeline, use_container_width=True)
+        else:
+            st.write("Nenhum dado disponível para a linha do tempo.")
+
         # Insights e recomendações
         st.header("Insights e Recomendações")
 
