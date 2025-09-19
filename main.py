@@ -228,9 +228,10 @@ else:
     turnos_selecionados = [t for t in df['Turno'].unique() if t != 'Fora do Expediente']
     periodo = []
 
-# Aplicar filtros
+# Aplicar filtros CORRETAMENTE
 df_filtrado = df.copy()
 
+# Aplicar filtros apenas se as colunas existirem e se houver seleção
 if 'Local' in df.columns and locais_selecionados:
     df_filtrado = df_filtrado[df_filtrado['Local'].isin(locais_selecionados)]
 
@@ -243,13 +244,28 @@ if 'Status' in df.columns and status_selecionados:
 if 'Turno' in df.columns and turnos_selecionados:
     df_filtrado = df_filtrado[df_filtrado['Turno'].isin(turnos_selecionados)]
 
+# Filtro de período - CORREÇÃO IMPORTANTE
 if 'Data Início' in df.columns and len(periodo) == 2:
-    data_inicio = pd.to_datetime(periodo[0])
-    data_fim = pd.to_datetime(periodo[1])
-    df_filtrado = df_filtrado[
-        (df_filtrado['Data Início'] >= data_inicio) &
-        (df_filtrado['Data Início'] <= data_fim)
-    ]
+    try:
+        data_inicio = pd.to_datetime(periodo[0])
+        data_fim = pd.to_datetime(periodo[1])
+        # Incluir todo o dia final (até 23:59:59)
+        data_fim = data_fim + timedelta(hours=23, minutes=59, seconds=59)
+        
+        df_filtrado = df_filtrado[
+            (df_filtrado['Data Início'] >= data_inicio) & 
+            (df_filtrado['Data Início'] <= data_fim)
+        ]
+    except Exception as e:
+        st.error(f"Erro ao aplicar filtro de período: {e}")
+
+# MOSTRAR INFORMAÇÕES SOBRE FILTROS - para debug
+st.sidebar.info(f"📊 **Registros após filtros:** {len(df_filtrado)}/{len(df)}")
+
+# Verificar se há dados após filtragem
+if len(df_filtrado) == 0:
+    st.warning("⚠️ Nenhum registro encontrado com os filtros aplicados!")
+    st.info("💡 Tente ajustar os filtros ou verificar se os dados possuem as colunas necessárias")
 
 # Cálculo dos KPIs CORRETOS
 paradas_fechadas = df_filtrado[df_filtrado['Status'] == 'Fechado']
@@ -677,28 +693,65 @@ for prioridade, itens in recomendacoes.items():
 st.markdown("---")
 st.markdown("### 📋 Dados Detalhados das Paradas")
 
+# Mostrar estatísticas dos filtros
+st.info(f"**Total de registros carregados:** {len(df)}")
+st.success(f"**Registros após filtros:** {len(df_filtrado)}")
+
 # Checkbox para mostrar/ocultar tabela completa
 show_full_table = st.checkbox("📊 Mostrar tabela completa de dados", value=False)
 
 if show_full_table:
-    st.dataframe(df_filtrado)
+    # Mostrar todas as colunas e linhas
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', 1000)
+    
+    st.dataframe(df_filtrado, height=400, use_container_width=True)
+    
+    # Botão para mostrar informações técnicas
+    if st.button("🔍 Mostrar informações técnicas da tabela"):
+        st.write(f"**Forma da tabela:** {df_filtrado.shape}")
+        st.write(f"**Colunas:** {list(df_filtrado.columns)}")
+        st.write(f"**Intervalo de datas:** {df_filtrado['Data Início'].min()} a {df_filtrado['Data Início'].max()}")
 else:
     st.write(f"**Total de registros filtrados:** {len(df_filtrado)}")
     st.write("💡 Marque a caixa acima para visualizar a tabela completa")
 
-# Download dos dados filtrados
+# Download dos dados filtrados - CORRIGIDO
 @st.cache_data
 def convert_df_to_csv(df):
-    return df.to_csv(index=False, encoding='utf-8')
+    return df.to_csv(index=False, encoding='utf-8', sep=';')
 
-csv = convert_df_to_csv(df_filtrado)
+if len(df_filtrado) > 0:
+    csv = convert_df_to_csv(df_filtrado)
+    
+    st.download_button(
+        label=f"📥 Baixar dados filtrados ({len(df_filtrado)} registros)",
+        data=csv,
+        file_name="paradas_manutencao_analise.csv",
+        mime="text/csv",
+    )
+else:
+    st.warning("Não há dados para download")
 
-st.download_button(
-    label="📥 Baixar dados filtrados (CSV)",
-    data=csv,
-    file_name="paradas_manutencao_analise.csv",
-    mime="text/csv",
-)
+
+
+# Função de debug para verificar filtros (coloque antes dos filtros)
+def debug_filters():
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🐛 Debug de Filtros")
+    
+    if st.sidebar.checkbox("Mostrar informações de debug", value=False):
+        st.sidebar.write(f"Total original: {len(df)}")
+        st.sidebar.write(f"Locais selecionados: {locais_selecionados}")
+        st.sidebar.write(f"Equipamentos selecionados: {equipamentos_selecionados}")
+        st.sidebar.write(f"Status selecionados: {status_selecionados}")
+        st.sidebar.write(f"Turnos selecionados: {turnos_selecionados}")
+        st.sidebar.write(f"Período selecionado: {periodo}")
+
+# Chame a função antes de aplicar os filtros
+debug_filters()
+
+
 
 # Informações finais na sidebar
 st.sidebar.markdown("---")
