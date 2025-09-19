@@ -140,6 +140,58 @@ def analise_horarios_pico(df):
     
     return df, df_admin
 
+# Função para criar gráfico de Pareto
+def create_pareto_chart(data, category_column, value_column, title, height=500):
+    """
+    Cria um gráfico de Pareto
+    """
+    # Agrupar dados
+    grouped_data = data.groupby(category_column)[value_column].sum().reset_index()
+    grouped_data = grouped_data.sort_values(value_column, ascending=False)
+    
+    # Calcular percentual acumulado
+    grouped_data['Cumulative Percentage'] = (grouped_data[value_column].cumsum() / grouped_data[value_column].sum() * 100)
+    
+    # Criar gráfico de barras
+    fig = go.Figure()
+    
+    # Adicionar barras
+    fig.add_trace(go.Bar(
+        x=grouped_data[category_column],
+        y=grouped_data[value_column],
+        name='Quantidade',
+        marker_color='blue'
+    ))
+    
+    # Adicionar linha de Pareto
+    fig.add_trace(go.Scatter(
+        x=grouped_data[category_column],
+        y=grouped_data['Cumulative Percentage'],
+        name='Percentual Acumulado',
+        yaxis='y2',
+        mode='lines+markers',
+        marker=dict(color='red', size=8),
+        line=dict(color='red', width=2)
+    ))
+    
+    # Configurar layout
+    fig.update_layout(
+        title=title,
+        xaxis_title=category_column,
+        yaxis_title=value_column,
+        yaxis2=dict(
+            title='Percentual Acumulado (%)',
+            overlaying='y',
+            side='right',
+            range=[0, 100]
+        ),
+        height=height,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    return fig, grouped_data
+
 # Carregar dados
 df = load_data()
 
@@ -279,31 +331,30 @@ if dados_suficientes:
     mttr = paradas_fechadas['Tempo de Parada (h)'].mean()
 
     # MTBF e Disponibilidade (CORRIGIDOS)
-    if len(paradas_fechadas) > 1:
-        paradas_ordenadas = paradas_fechadas.sort_values('Data Início')
+    if len(paradas_fechadas) > 0:
+        # Usar todo o dataset filtrado para calcular o período total
+        # Isso inclui o último registro, mesmo que seja aberto
+        data_minima = df_filtrado['Data Início'].min()
+        data_maxima = df_filtrado['Data Início'].max()
         
-        # Tempo total do período analisado
-        tempo_total_periodo = (paradas_ordenadas['Data Início'].max() - 
-                              paradas_ordenadas['Data Início'].min()).total_seconds() / 3600
+        # Tempo total do período analisado (considera TODOS os registros)
+        tempo_total_periodo = (data_maxima - data_minima).total_seconds() / 3600
         
         # MTBF = Tempo operacional / Número de falhas
         tempo_operacional = tempo_total_periodo - paradas_fechadas['Tempo de Parada (h)'].sum()
-        mtbf = tempo_operacional / len(paradas_fechadas)
+        mtbf = tempo_operacional / len(paradas_fechadas) if len(paradas_fechadas) > 0 else 0
         
         # Disponibilidade = Tempo operacional / Tempo total
-        disponibilidade = (tempo_operacional / tempo_total_periodo) * 100
+        disponibilidade = (tempo_operacional / tempo_total_periodo) * 100 if tempo_total_periodo > 0 else 100
         
-    elif len(paradas_fechadas) == 1:
-        # Caso com apenas uma parada
-        mtbf = 0
-        disponibilidade = 100
     else:
+        # Caso sem paradas fechadas
         mtbf = 0
         disponibilidade = 100
 
     # Outros cálculos
     tempo_total_parada = paradas_fechadas['Tempo de Parada (h)'].sum()
-    tempo_operacional_calc = (paradas_ordenadas['Data Início'].max() - paradas_ordenadas['Data Início'].min()).total_seconds() / 3600 - tempo_total_parada if len(paradas_fechadas) > 1 else 0
+    tempo_operacional_calc = tempo_operacional
     
 else:
     # Valores padrão quando não há dados suficientes
@@ -534,31 +585,73 @@ fig_piramide.update_layout(
 
 st.plotly_chart(fig_piramide, use_container_width=True)
 
-# Análise da pirâmide
-col9, col10 = st.columns(2)
+# ANÁLISE DE PARETO - NOVA SEÇÃO ADICIONADA
+st.markdown("---")
+st.markdown("### 📊 Análise de Pareto - Principais Causas de Parada")
 
-with col9:
-    st.markdown("""
-    **📊 Interpretação da Pirâmide:**
-    - **1:3:8:20:600** - Relação clássica de eventos
-    - **Base (600)**: Atos inseguros - oportunidades de prevenção
-    - **Topo (1)**: Acidentes graves - consequências evitáveis
+if len(df_filtrado) > 0:
+    # Selecionar a coluna para análise de Pareto
+    pareto_options = []
+    if 'Causa' in df_filtrado.columns:
+        pareto_options.append('Causa')
+    if 'Equipamento' in df_filtrado.columns:
+        pareto_options.append('Equipamento')
+    if 'Local' in df_filtrado.columns:
+        pareto_options.append('Local')
     
-    **🎯 Estratégia de Ação:**
-    - Focar na base para evitar o topo
-    - Cada ato inseguro prevenido evita 600 problemas
-    - Cultura de reporte de quase acidentes
-    """)
-
-with col10:
-    st.markdown("""
-    **📋 Recomendações para Tomada de Decisão:**
-    1. **Implementar checklist diário** de segurança
-    2. **Treinamento contínuo** em procedimentos seguros
-    3. **Programa de observação** de comportamentos
-    4. **Análise de causa raiz** para todos os incidentes
-    5. **Metas de redução** na base da pirâmide
-    """)
+    if pareto_options:
+        pareto_category = st.selectbox(
+            "Selecione a categoria para análise de Pareto:",
+            options=pareto_options,
+            index=0
+        )
+        
+        # Criar gráfico de Pareto
+        if 'Tempo de Parada (h)' in df_filtrado.columns:
+            # Usar tempo de parada como valor
+            fig_pareto, pareto_data = create_pareto_chart(
+                df_filtrado, 
+                pareto_category, 
+                'Tempo de Parada (h)', 
+                f'Pareto - Tempo de Parada por {pareto_category}',
+                height=600
+            )
+        else:
+            # Usar contagem de ocorrências como valor
+            fig_pareto, pareto_data = create_pareto_chart(
+                df_filtrado, 
+                pareto_category, 
+                'Status',  # Usaremos qualquer coluna só para contar
+                f'Pareto - Número de Paradas por {pareto_category}',
+                height=600
+            )
+            # Ajustar para usar contagem em vez de soma
+            pareto_count = df_filtrado[pareto_category].value_counts().reset_index()
+            pareto_count.columns = [pareto_category, 'Count']
+            pareto_count = pareto_count.sort_values('Count', ascending=False)
+            pareto_count['Cumulative Percentage'] = (pareto_count['Count'].cumsum() / pareto_count['Count'].sum() * 100)
+            
+            fig_pareto.data[0].y = pareto_count['Count']
+            fig_pareto.data[1].y = pareto_count['Cumulative Percentage']
+        
+        st.plotly_chart(fig_pareto, use_container_width=True)
+        
+        # Mostrar tabela com dados do Pareto
+        with st.expander("📋 Ver dados detalhados do Pareto"):
+            st.dataframe(pareto_data)
+            
+            # Análise 80/20
+            if len(pareto_data) > 0:
+                eighty_percent_index = pareto_data[pareto_data['Cumulative Percentage'] >= 80].index.min()
+                if not pd.isna(eighty_percent_index):
+                    top_categories = pareto_data.head(eighty_percent_index + 1)
+                    st.write(f"**Princípio 80/20:** {len(top_categories)} categorias representam 80% do total")
+                    for i, row in top_categories.iterrows():
+                        st.write(f"- {row[pareto_category]}: {row['Cumulative Percentage']:.1f}%")
+    else:
+        st.warning("ℹ️ Não há colunas adequadas para análise de Pareto (Causa, Equipamento ou Local).")
+else:
+    st.warning("⚠️ Não há dados para análise de Pareto.")
 
 # Gráficos de análise
 st.markdown("---")
@@ -733,26 +826,6 @@ if len(df_filtrado) > 0:
 else:
     st.warning("Não há dados para download")
 
-
-
-# Função de debug para verificar filtros (coloque antes dos filtros)
-def debug_filters():
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🐛 Debug de Filtros")
-    
-    if st.sidebar.checkbox("Mostrar informações de debug", value=False):
-        st.sidebar.write(f"Total original: {len(df)}")
-        st.sidebar.write(f"Locais selecionados: {locais_selecionados}")
-        st.sidebar.write(f"Equipamentos selecionados: {equipamentos_selecionados}")
-        st.sidebar.write(f"Status selecionados: {status_selecionados}")
-        st.sidebar.write(f"Turnos selecionados: {turnos_selecionados}")
-        st.sidebar.write(f"Período selecionado: {periodo}")
-
-# Chame a função antes de aplicar os filtros
-debug_filters()
-
-
-
 # Informações finais na sidebar
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
@@ -779,6 +852,9 @@ Relação 1-3-8-20-600 mostra que para cada acidente grave há:
 - 8 incidentes com danos
 - 20 quase acidentes
 - 600 atos inseguros
+
+**📊 Análise de Pareto:**
+Princípio 80/20 onde 20% das causas geram 80% dos problemas
 """)
 
 st.sidebar.markdown("---")
