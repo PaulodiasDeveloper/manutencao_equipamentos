@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import openpyxl
 from io import BytesIO
+from sklearn.linear_model import LinearRegression
 
 # Configuração da página
 st.set_page_config(
@@ -16,7 +17,7 @@ st.set_page_config(
 )
 
 # Título do aplicativo
-st.title("📊 Dashboard de KPIs de Manutenção com Pirâmide de Bird")
+st.title("📊 Análise de KPIs de Manutenção")
 
 # Função para carregar dados via upload
 def load_data():
@@ -53,15 +54,27 @@ def load_data():
             # Mostrar preview dos dados com toggle
             st.success("✅ Arquivo carregado com sucesso!")
             
+            # # Checkbox para mostrar/ocultar preview
+            # show_preview = st.checkbox("👁️ Mostrar preview dos dados (primeiras 5 linhas)", value=True)
+            
+            # if show_preview:
+            #     st.write("📋 **Preview dos dados:**")
+            #     st.dataframe(df.head())
+
             # Checkbox para mostrar/ocultar preview
-            show_preview = st.checkbox("👁️ Mostrar preview dos dados (primeiras 5 linhas)", value=True)
+            show_preview = st.checkbox("📋 Resumo da Análise de KPIs de Manutenção)", value=True)
             
-            if show_preview:
-                st.write("📋 **Preview dos dados:**")
-                st.dataframe(df.head())
+            if show_preview: st.write(""" 
             
+            No período de maio a agosto de 2025, a análise dos dados de manutenção revelou uma disponibilidade operacional crítica de 42,89%, com 20 paradas registradas e tempos médios de reparo (MTTR) elevados (108,10h), superando o tempo entre falhas (MTBF de 1945,8h). 
+            
+            A maioria das paradas (95,2%) concentrou-se no horário administrativo, com pico às 08h. 
+                                      
+            A Manipuladora foi o equipamento mais problemático, responsável por 47,1% das paradas. As principais causas incluem substituição de mangueiras hidráulicas e falhas mecânicas. A Pirâmide de Bird apontou uma base significativa de atos inseguros, indicando oportunidades de prevenção." "Recomenda-se revisão da manutenção preventiva, otimização do estoque de peças e atenção ao horário de pico para elevar a confiabilidade e a segurança operacional.""")
+
+
             # Mostrar informações do dataset
-            st.write("📊 **Informações do dataset:**")
+            st.markdown("## 📊 **Informações do dataset:**")
             col_info1, col_info2, col_info3 = st.columns(3)
             with col_info1:
                 st.write(f"**Total de registros:** {len(df)}")
@@ -72,13 +85,6 @@ def load_data():
                 st.write(f"**Período:** {date_range}")
             with col_info3:
                 st.write(f"**Colunas disponíveis:** {len(df.columns)}")
-            
-            # Mostrar lista de colunas disponíveis com toggle
-            show_columns = st.checkbox("📋 Mostrar lista de colunas disponíveis", value=False)
-            if show_columns:
-                st.write("**Colunas no dataset:**")
-                for i, col in enumerate(df.columns, 1):
-                    st.write(f"{i}. {col}")
             
             return df
             
@@ -369,7 +375,7 @@ total_paradas = len(df_filtrado)
 paradas_abertas_count = len(paradas_abertas)
 
 # Exibir KPIs
-st.markdown("### 📈 KPIs de Manutenção")
+st.markdown("### 🎯 Visão Geral dos Principais KPIs Manutenção")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -401,6 +407,8 @@ else:
 # ANÁLISE DE HORÁRIOS DE PICO - APENAS HORÁRIO ADMINISTRATIVO
 st.markdown("---")
 st.markdown("### 🕐 Análise de Horários de Pico - Horário Administrativo")
+
+
 
 # Estatísticas sobre horário administrativo
 total_paradas_admin = len(df_admin)
@@ -587,7 +595,7 @@ st.plotly_chart(fig_piramide, use_container_width=True)
 
 # ANÁLISE DE PARETO - NOVA SEÇÃO ADICIONADA
 st.markdown("---")
-st.markdown("### 📊 Análise de Pareto - Principais Causas de Parada")
+st.markdown("### 📊 Principais Análise Causas de Parada")
 
 if len(df_filtrado) > 0:
     # Selecionar a coluna para análise de Pareto
@@ -748,6 +756,44 @@ if show_charts:
             )
             st.plotly_chart(fig_causas, use_container_width=True)
 
+
+
+# Análise de Regressão Linear para Previsão de Produtividade
+
+# Análise de Regressão Linear para Previsão de Produtividade
+
+st.markdown("## 🔬 Análise de Regressão Linear para Previsão de Produtividade")
+
+col_treino1, col_treino2 = st.columns(2)
+with col_treino1:
+    var_alvo = st.selectbox('Selecione a variável de produtividade/alvo:', [col for col in df_filtrado.columns if df_filtrado[col].dtype in [np.float64, np.int64]], key='reg_target')
+with col_treino2:
+    vars_exp = st.multiselect('Selecione variáveis explicativas:', [col for col in df_filtrado.columns if (df_filtrado[col].dtype in [np.float64, np.int64] and col != var_alvo)], key='reg_features')
+
+if var_alvo and vars_exp:
+    df_model = df_filtrado.dropna(subset=[var_alvo]+vars_exp)
+    X = df_model[vars_exp].values
+    y = df_model[var_alvo].values
+    modelo = LinearRegression()
+    modelo.fit(X, y)
+    st.write(f"**Coeficientes:** {modelo.coef_}")
+    st.write(f"**Intercepto:** {modelo.intercept_:.2f}")
+    st.write(f"**R² (explicação da regressão):** {modelo.score(X,y):.3f}")
+
+    novo = st.text_input(f'Digite valores para {vars_exp} separados por vírgula para prever produtividade:', key='reg_input')
+    if novo:
+        try:
+            valores = np.array([float(val) for val in novo.split(',')]).reshape(1,-1)
+            pred = modelo.predict(valores)
+            st.success(f"Produtividade prevista: {pred[0]:.2f}")
+        except Exception:
+            st.error("Formato inválido! Insira valores numéricos separados por vírgula.")
+else:
+    st.info("Selecione o alvo e ao menos uma variável explicativa para rodar a regressão.")
+
+
+
+
 # Recomendações finais baseadas na análise de horário administrativo
 st.markdown("---")
 st.markdown("### 🎯 Recomendações Estratégicas - Horário Administrativo")
@@ -835,16 +881,30 @@ st.sidebar.markdown("""
 - Tempo médio para reparar uma falha
 - Fórmula: Σ(Tempo de reparo) / Nº de reparos
 - Meta: Quanto menor, melhor
+- Tempo médio de reparo elevado – indica lentidão na resolução 108.10 h
 
 **MTBF (Mean Time Between Failures):**
 - Tempo médio entre falhas
 - Fórmula: Tempo operacional / Nº de falhas
 - Meta: Quanto maior, melhor
+- Baixo tempo entre falhas – equipamentos falham com frequência
 
 **Disponibilidade:**
 - Percentual de tempo operacional
 - Fórmula: (Tempo operacional / Tempo total) × 100
 - Meta: >95%
+- Muito abaixo do ideal (>95%) – impacto direto na operação
+
+**Eficiência Manutenção:**                
+- Eficiência da Manutenção -33.2%
+- Processo ineficaz – possíveis gargalos ou falta de recursos
+
+**Taxa de Falhas:**
+- Alta frequência de quebras 0.0123 h
+
+**Confiabilidade:**
+- Nenhum equipamento operou sem falhas no período 0.0%
+
 
 **🏗️ Pirâmide de Bird:**
 Relação 1-3-8-20-600 mostra que para cada acidente grave há:
